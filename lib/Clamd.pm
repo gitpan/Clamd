@@ -1,4 +1,4 @@
-# $Id: Clamd.pm,v 1.3 2002/11/03 11:54:48 matt Exp $
+# $Id: Clamd.pm,v 1.4 2002/11/04 18:41:32 matt Exp $
 
 package Clamd;
 use strict;
@@ -6,7 +6,7 @@ use vars qw($VERSION);
 use File::Find qw(find);
 use IO::Socket;
 
-$VERSION = '1.00';
+$VERSION = '1.01';
 
 =head1 NAME
 

@@ -1,4 +1,7 @@
 Clamd Changes
 
+1.01
+    - Stop in Makefile.PL if clamd isn't in the path
+
 1.00
     - Initial release
