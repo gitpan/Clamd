@@ -10,14 +10,18 @@ do "t/mkconf.pl";
 my $pid = fork;
 die "Fork failed" unless defined $pid;
 if (!$pid) {
-    exec "clamd -c clamav.conf";
+    exec "$ENV{CLAMD_PATH}/clamd -c clamav.conf";
+    die "Clamd failed to start: $!";
 }
 for (1..10) {
   last if (-e "clamsock");
+  if (kill(0 => $pid) == 0) {
+    die "Clamd appears to have died";
+  }
   sleep(1);
 }
 
-my $clamd = Clamd->new(port => "clamsock", deep_scan => 1);
+my $clamd = Clamd->new(port => "clamsock", find_all => 1);
 ok($clamd);
 my $dir = cwd;
 ok($dir);

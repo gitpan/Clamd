@@ -1,4 +1,7 @@
 use Cwd;
+
+die "No CLAMD_PATH environment!" unless $ENV{CLAMD_PATH};
+
 open(CONF, ">clamav.conf") || die "Cannot write: $!";
 
 my $dir = cwd;

@@ -1,4 +1,4 @@
-# $Id: Clamd.pm,v 1.4 2002/11/04 18:41:32 matt Exp $
+# $Id: Clamd.pm,v 1.12 2002/11/21 14:51:45 matt Exp $
 
 package Clamd;
 use strict;
@@ -6,7 +6,7 @@ use vars qw($VERSION);
 use File::Find qw(find);
 use IO::Socket;
 
-$VERSION = '1.01';
+$VERSION = '1.04';
 
 =head1 NAME
 
@@ -65,12 +65,12 @@ so there would not be much point in doing this (unless you
 had NFS shares). Plus if you are using TCP/IP clamd appears
 to bind to all adaptors, so it is probably insecure.
 
-=item * deep_scan
+=item * find_all
 
 By default clamd will stop at the first virus it detects. This
 is useful for performance, but sometimes you want to find all
 possible viruses in all of the files. To do that, specify a
-true value for deep_scan.
+true value for find_all.
 
 Examples:
 
@@ -79,7 +79,7 @@ Examples:
   my ($file, $virus) = $clamd->scan('/home/bob');
   
   # Return all viruses
-  my $clamd = Clamd->new(deep_scan => 1);
+  my $clamd = Clamd->new(find_all => 1);
   my %caught = $clamd->scan('/home/bob');
 
 =cut
@@ -88,7 +88,7 @@ sub new {
     my $class = shift;
     my (%options) = @_;
     $options{port} ||= '/tmp/clamd';
-    $options{deep_scan} ||= 0;
+    $options{find_all} ||= 0;
     return bless \%options, $class;
 }
 
@@ -103,12 +103,15 @@ any call to scan(). See below for more details.
 
 sub ping {
     my $self = shift;
-    my $conn = $self->_get_connection();
-    print $conn "PING\n";
-    my $response = $conn->getline;
+    my $response;
+    eval {
+        my $conn = $self->_get_connection();
+        print $conn "PING\n";
+        $response = $conn->getline;
+        1 while (<$conn>);
+        $conn->close;
+    };
     $response = '' unless defined $response;
-    1 while (<$conn>);
-    $conn->close;
     chomp($response);
     return $response eq 'PONG';
 }
@@ -134,7 +137,7 @@ an option to scan() as follows:
 
 sub scan {
     my $self = shift;
-    if ($self->{deep_scan}) {
+    if ($self->{find_all}) {
         return $self->_scan('SCAN', @_);
     }
     return $self->_scan_shallow('SCAN', @_);
@@ -148,7 +151,7 @@ Same as scan(), but does not scan inside of archives.
 
 sub rawscan {
     my $self = shift;
-    if ($self->{deep_scan}) {
+    if ($self->{find_all}) {
         return $self->_scan('RAWSCAN', @_);
     }
     return $self->_scan_shallow('RAWSCAN', @_);
@@ -207,6 +210,8 @@ sub _scan_shallow {
     $options->{RaiseError} = 1 unless exists($options->{RaiseError});
     $options->{ShowWarnings} = 1 unless exists($options->{ShowWarnings});
     my @dirs = @_;
+
+    my @results;
     
     foreach my $file (@dirs) {
         my $conn = $self->_get_connection();
@@ -222,19 +227,26 @@ sub _scan_shallow {
                 die("Error processing $filename: $desc");
             }
             elsif ($type eq 'FOUND') {
-                return $filename, $desc;
+                push @results, $filename, $desc;
             }
         }
     }
-    return;
+    return @results;
 }
 
 =head2 quit()
 
 Sends the QUIT message to clamd, causing it to cleanly exit.
 
-This may or may not work. Currently the test is disabled because
-sometimes it appears to create zombies. Not good.
+This may or may not work, I think due to bugs in clamd's C code
+(it does not waitpid after a child exit, so you get zombies). However
+it seems to be fine on BSD derived operating systems (i.e. it's just
+broken under Linux).
+
+The test file t/03quit.t will currently wait 5 seconds before trying
+a kill -9 to get rid of the process. You may have to do something
+similar on Linux, or just don't use this method to kill Clamd - use
+C<kill `cat /path/to/clamd.pid`> instead which seems to work fine.
 
 =cut
 
@@ -242,9 +254,8 @@ sub quit {
     my $self = shift;
     my $conn = $self->_get_connection();
     print $conn "QUIT\r\n";
-    shutdown($conn, 1);
-    # 1 while (<$conn>);
-    # $conn->close;
+    1 while (<$conn>);
+    $conn->close;
     return 1;
 }
 
